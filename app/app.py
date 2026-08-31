@@ -36,6 +36,7 @@ def create_app(config_name=None):
     from app.resources.relationships import relationship_ns
     from app.resources.queries import query_ns
     from app.resources.schema import schema_ns
+    from app.resources.model_text import model_ns
 
     api.add_namespace(project_ns, path="/projects")
     api.add_namespace(commit_ns, path="/commits")
@@ -45,6 +46,7 @@ def create_app(config_name=None):
     api.add_namespace(relationship_ns, path="/relationships")
     api.add_namespace(query_ns, path="/query")
     api.add_namespace(schema_ns, path="/schema")
+    api.add_namespace(model_ns, path="/model")
 
     @app.route("/")
     def index():
