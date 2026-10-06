@@ -69,6 +69,10 @@ class ProjectModelText(Resource):
 
         store = _store()
         by_id = {}
+        # spec: an ingestion creates a commit that owns the new elements
+        from app.models.lifecycle import Commit
+        commit = Commit(project_id=project_id, description="model.sysml import")
+        store.add_commit(commit)
         for data in elements:
             # normalize reference keys for the existing store ("id" style)
             for ref_key in ("owner", "project"):
@@ -80,17 +84,28 @@ class ProjectModelText(Resource):
                 data["owner"] = {"id": project_id}
             element = Element.from_dict(data)
             element.project_id = project_id
-            if element.owner_id:
-                owner = by_id.get(element.owner_id) or store.get_element(element.owner_id)
-                if owner is not None and getattr(owner, "qualified_name", None):
-                    element.qualified_name = f"{owner.qualified_name}::{element.name}"
-                elif element.name:
-                    element.qualified_name = element.name
-            store.add_element(element)
+            store.add_element(element, commit_id=commit.id)
             by_id[element.id] = element
-        return [
-            e.to_dict() for e in by_id.values()
-        ], 201
+        # qualified-name pass: resolve bottom-up (owners before owned) then
+        # propagate top-down in insertion order until stable
+        for _sweep in range(3):
+            changed = False
+            for element in by_id.values():
+                owner = by_id.get(element.owner_id) if element.owner_id else None
+                owner_qn = getattr(owner, "qualified_name", None) if owner else None
+                target = (f"{owner_qn}::{element.name}" if owner_qn
+                          else element.name if element.name else None)
+                if target and target != element.qualified_name:
+                    element.qualified_name = target
+                    store.update_element(element.id, element.to_dict(include_all=True))
+                    changed = True
+            if not changed:
+                break
+        result = [e.to_dict(include_all=True) for e in by_id.values()]
+        # annotate which commit introduced these elements
+        for d in result:
+            d["commit"] = {"identifier": commit.id}
+        return result, 201, {"X-SysML-Commit": commit.id}
 
 
 class ModelTextBuilder:

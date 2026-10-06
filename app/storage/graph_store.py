@@ -8,6 +8,7 @@ class GraphStore:
         self.projects = {}
         self.branches = {}
         self.tags = {}
+        self.queries = {}
 
     def add_element(self, element, commit_id=None):
         node_data = element.to_dict(include_all=True)
@@ -28,8 +29,8 @@ class GraphStore:
             type=node_data.get("@type", "Element"),
             name=node_data.get("name"),
             qualified_name=node_data.get("qualifiedName"),
-            owner_id=node_data.get("owner", {}).get("id") if node_data.get("owner") else None,
-            project_id=node_data.get("project", {}).get("id") if node_data.get("project") else None,
+            owner_id=(node_data["owner"].get("identifier") or node_data["owner"].get("id")) if node_data.get("owner") else None,
+            project_id=(node_data["project"].get("identifier") or node_data["project"].get("id")) if node_data.get("project") else None,
         )
         for key, value in node_data.items():
             if key not in ("@type", "identifier", "name", "qualifiedName", "owner", "project", "commit"):
@@ -47,8 +48,8 @@ class GraphStore:
                 type=node_data.get("@type", "Element"),
                 name=node_data.get("name"),
                 qualified_name=node_data.get("qualifiedName"),
-                owner_id=node_data.get("owner", {}).get("id") if node_data.get("owner") else None,
-                project_id=node_data.get("project", {}).get("id") if node_data.get("project") else None,
+                owner_id=(node_data["owner"].get("identifier") or node_data["owner"].get("id")) if node_data.get("owner") else None,
+                project_id=(node_data["project"].get("identifier") or node_data["project"].get("id")) if node_data.get("project") else None,
             )
             for key, value in node_data.items():
                 if key not in ("@type", "identifier", "name", "qualifiedName", "owner", "project", "commit"):
@@ -122,7 +123,7 @@ class GraphStore:
         owned = []
         for node_id, node_data in self.graph.nodes(data=True):
             owner = node_data.get("owner")
-            if owner and owner.get("id") == owner_id:
+            if owner and owner.get("identifier", owner.get("id")) == owner_id:
                 from app.models.element import Element
                 element = Element(
                     element_id=node_data.get("identifier"),
@@ -130,7 +131,7 @@ class GraphStore:
                     name=node_data.get("name"),
                     qualified_name=node_data.get("qualifiedName"),
                     owner_id=owner_id,
-                    project_id=node_data.get("project", {}).get("id") if node_data.get("project") else None,
+                    project_id=(node_data["project"].get("identifier") or node_data["project"].get("id")) if node_data.get("project") else None,
                 )
                 for key, value in node_data.items():
                     if key not in ("@type", "identifier", "name", "qualifiedName", "owner", "project"):
@@ -248,6 +249,50 @@ class GraphStore:
         del self.tags[tag_id]
         return True
 
+    def add_query(self, query):
+        self.queries[query.id] = query
+        return query
+
+    def get_query(self, query_id):
+        return self.queries.get(query_id)
+
+    def delete_query(self, query_id):
+        if query_id not in self.queries:
+            return False
+        del self.queries[query_id]
+        return True
+
+    def get_root_elements(self, project_id=None, commit_id=None):
+        """Elements with no owner (spec getRootElements)."""
+        roots = []
+        for node_id, node_data in self.graph.nodes(data=True):
+            if commit_id and node_data.get("commit") != commit_id:
+                continue
+            owner = node_data.get("owner")
+            oid = owner.get("identifier") or owner.get("id") if isinstance(owner, dict) else None
+            if oid and oid in self.graph:
+                continue  # owned by another element -> not a root
+            if project_id:
+                proj = node_data.get("project")
+                if (proj.get("identifier") if isinstance(proj, dict) else None) != project_id:
+                    continue
+            else:
+                proj = node_data.get("project")
+            from app.models.element import Element
+            element = Element(
+                element_id=node_id,
+                type=node_data.get("@type", "Element"),
+                name=node_data.get("name"),
+                qualified_name=node_data.get("qualifiedName"),
+                owner_id=None,
+                project_id=proj.get("identifier") if isinstance(proj, dict) else node_data.get("project_id"),
+            )
+            for key, value in node_data.items():
+                if key not in ("@type", "identifier", "name", "qualifiedName", "owner", "project", "commit"):
+                    element.data[key] = value
+            roots.append(element)
+        return roots
+
     def query_elements(self, filters=None):
         elements = []
         from app.models.element import Element
@@ -276,8 +321,8 @@ class GraphStore:
                     type=node_data.get("@type", "Element"),
                     name=node_data.get("name"),
                     qualified_name=node_data.get("qualifiedName"),
-                    owner_id=node_data.get("owner", {}).get("id") if node_data.get("owner") else None,
-                    project_id=node_data.get("project", {}).get("id") if node_data.get("project") else None,
+                    owner_id=(node_data["owner"].get("identifier") or node_data["owner"].get("id")) if node_data.get("owner") else None,
+                    project_id=(node_data["project"].get("identifier") or node_data["project"].get("id")) if node_data.get("project") else None,
                 )
                 for k, v in node_data.items():
                     if k not in ("@type", "identifier", "name", "qualifiedName", "owner", "project"):

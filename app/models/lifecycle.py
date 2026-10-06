@@ -12,7 +12,9 @@ class Project:
 
     def to_dict(self):
         return {
+            "@type": "Project",
             "id": self.id,
+            "identifier": self.id,
             "name": self.name,
             "description": self.description,
             "created": self.created,
@@ -43,19 +45,23 @@ class Commit:
 
     def to_dict(self):
         result = {
+            "@type": "Commit",
             "id": self.id,
-            "project": {"id": self.project_id} if self.project_id else None,
+            "identifier": self.id,
+            "owningProject": {"identifier": self.project_id} if self.project_id else None,
+            "project": {"identifier": self.project_id} if self.project_id else None,
             "description": self.description,
             "created": self.created,
         }
         if self.previous:
-            result["previous"] = {"id": self.previous}
+            result["previous"] = {"identifier": self.previous}
         return result
 
     @classmethod
     def from_dict(cls, data):
+        project = data.get("project")
         commit = cls(
-            project_id=data.get("project", {}).get("id") if data.get("project") else None,
+            project_id=(project.get("identifier") or project.get("id")) if isinstance(project, dict) else None,
             commit_id=data.get("id"),
             description=data.get("description"),
         )
@@ -75,21 +81,25 @@ class Branch:
 
     def to_dict(self):
         result = {
+            "@type": "Branch",
             "id": self.id,
-            "project": {"id": self.project_id} if self.project_id else None,
+            "identifier": self.id,
+            "owningProject": {"identifier": self.project_id} if self.project_id else None,
+            "project": {"identifier": self.project_id} if self.project_id else None,
             "name": self.name,
         }
         if self.head:
-            result["head"] = {"id": self.head}
+            result["head"] = {"identifier": self.head}
         return result
 
     @classmethod
     def from_dict(cls, data):
+        project = data.get("project")
         branch = cls(
-            project_id=data.get("project", {}).get("id") if data.get("project") else None,
+            project_id=(project.get("identifier") or project.get("id")) if isinstance(project, dict) else None,
             branch_id=data.get("id"),
             name=data.get("name"),
-            head=data.get("head", {}).get("id") if data.get("head") else None,
+            head=data.get("head", {}).get("identifier") if data.get("head") else None,
         )
         return branch
 
@@ -103,20 +113,57 @@ class Tag:
 
     def to_dict(self):
         result = {
+            "@type": "Tag",
             "id": self.id,
-            "project": {"id": self.project_id} if self.project_id else None,
+            "identifier": self.id,
+            "owningProject": {"identifier": self.project_id} if self.project_id else None,
+            "project": {"identifier": self.project_id} if self.project_id else None,
             "name": self.name,
         }
         if self.commit:
-            result["commit"] = {"id": self.commit}
+            result["commit"] = {"identifier": self.commit}
         return result
 
     @classmethod
     def from_dict(cls, data):
+        project = data.get("project")
+        commit = data.get("commit")
         tag = cls(
-            project_id=data.get("project", {}).get("id") if data.get("project") else None,
+            project_id=(project.get("identifier") or project.get("id")) if isinstance(project, dict) else None,
             tag_id=data.get("id"),
             name=data.get("name"),
-            commit=data.get("commit", {}).get("id") if data.get("commit") else None,
+            commit=(commit.get("identifier") or commit.get("id")) if isinstance(commit, dict) else None,
         )
         return tag
+
+
+class SavedQuery:
+    """Spec Query record: a named, saved criteria set owned by a Project."""
+
+    def __init__(self, project_id=None, query_id=None, name=None, criteria=None, description=None):
+        self.id = query_id or str(uuid.uuid4())
+        self.project_id = project_id
+        self.name = name or "query"
+        self.criteria = criteria or {}
+        self.description = description or ""
+
+    def to_dict(self):
+        return {
+            "@type": "Query",
+            "id": self.id,
+            "identifier": self.id,
+            "owningProject": {"identifier": self.project_id} if self.project_id else None,
+            "name": self.name,
+            "description": self.description,
+            "criteria": self.criteria,
+        }
+
+    @classmethod
+    def from_dict(cls, data, project_id=None):
+        return cls(
+            project_id=project_id,
+            query_id=data.get("id"),
+            name=data.get("name"),
+            criteria=data.get("criteria") or data.get("filter") or {},
+            description=data.get("description"),
+        )

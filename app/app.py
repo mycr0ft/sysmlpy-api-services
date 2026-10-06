@@ -47,6 +47,11 @@ def create_app(config_name=None):
     api.add_namespace(query_ns, path="/query")
     api.add_namespace(schema_ns, path="/schema")
     api.add_namespace(model_ns, path="/model")
+    # spec-canonical URL space (/projects/{pid}/commits/... etc.) — plain
+    # Flask blueprint so paths appear EXACTLY as the spec defines them
+    # (flask_restx would inject its namespace prefix and mask marshals).
+    from app.resources.canonical import bp as canonical_bp
+    app.register_blueprint(canonical_bp, url_prefix="/api")
 
     @app.route("/")
     def index():
